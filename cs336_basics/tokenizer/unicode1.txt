@@ -1,0 +1,73 @@
+Q. What does chr(0) mean ? 
+> \x00 , these are control characters that are non printable, its is a null character
+
+Q. How does this characters string representation differ from its printed representation ? 
+> repr(chr(0)) : this outputs \x00 , null character ( hexadecimal escape for value 0)
+> print(repr(chr(0))) : prints nothing 
+
+
+UNDERSTANDING UNICODE STANDARD 
+
+Unicode Standard defines a mapping from characters to code points, since vocab would be large (around 150K items) and sparse (since many characters are quite rare)  [all the characters in all langs are available in this mapping] 
+
+From a character to its int value mapped we use `ord(character) value``
+and from integer to its char mapping we have this : `chr(integer) `
+
+But the vocab would be very large in this case ( 150K+ token ) and sparse ( most characters are never used) and its ever increasing 
+Earlier like very first gpt models had very 
+
+UNDERSTANDING UNICODE ENCODING
+
+Unicode Encoding converts a unicode character into a sequence of bytes (using `encode('utf-8')` and `decode('utf-8')` functions)
+
+Unicode codepoints into a sequence of bytes (e.g., via the UTF-8 encoding), we are essentially taking a sequence of codepoints (integers in the range 0 to 154,997) and transforming it into a sequence of byte values (integers in the range 0 to 255, if utf-8)
+
+So each character is encoded within range of 0-255 but will take multiple bits (kinda obvious) .. 
+
+How to know what is a leading bit and what is a continuation byte ? 
+leading bit always start with '1' , so a 2 byte representation would be something like : 110xxxxx , a 3 byte representation would be something like : 1110xxxx , a 4 byte representation would be something like 11110xxx
+
+so `ß` which is `C3 9F` in utf-8 has representation as : `11000011 10011111`
+
+```bash
+C3 = 11000011 → leading byte for 2-byte sequence  
+9F = 10011111 → continuation byte must start with '1'
+```
+
+
+Q. What are some reasons to prefer training our tokenizer on UTF-8 encoded bytes, rather than
+UTF-16 or UTF-32? It may be helpful to compare the output of these encodings for various
+input strings.
+> UTF-16 each character is encoded using 2 bytes (16 bits) , and utf-8 is kinda popular as of now 
+
+
+This is byte level tokenization, the problem is longer input sequences create long-term dependencies in the data.
+
+In UTF-8, 
+0x00–0x7F → 0–127 : valid ascii, single byte 
+0x80–0xBF → 128–191 : valid starting bytes of multi byte sequences
+0xC0–0xF7 → 192–247 : continuation bytes only
+
+
+SUBWORD LEVEL TOKENIZER 
+
+Longer words (more character) increase no. of bytes for byte-level tokenizer and that is also a problem so we have to settle somewhere in between 
+
+so we need to tradeoff somewhere in between that's where subword tokenisation is used 
+
+So this uses values from 0-255 .. (as its utf-8) for values more than this like integer value of 256 / 257 / 258 ..etc these are not defined and here we add our own vocabulary that is here we add tokens to this 
+
+PRE-TOKENIZATION 
+This is a step we do before starting the tokenization process as that is computationally very expensive ( whole pass over the full data) so to avoid this we take a count from the dataset about how often a word appears in the corpus ( its kinda like a mapping ) that is { 'word' : frequency_count}
+
+So simple methods used pre-tokenization on space ( that is data.split(' ') ) , but gpt-2 paper used these methods : 
+`PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""`
+
+So dataset is splitted based on this regex string and we pretokenize our dataset using this ! 
+
+When multiple pairs have the same count , we then do it in lexographically greater pair   
+If the pairs (“A”, “B”), (“A”, “C”), (“B”, “ZZ”), and (“BA”, “A”) all have the highest frequency, we’d merge (“BA”, “A”)
+
+
+Strip out the endoftext token from dataset, then use `re.finditer` to pretokenize based on gpt-2 regex pattern
+ 
