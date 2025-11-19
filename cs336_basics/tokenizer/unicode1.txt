@@ -69,5 +69,25 @@ When multiple pairs have the same count , we then do it in lexographically great
 If the pairs (“A”, “B”), (“A”, “C”), (“B”, “ZZ”), and (“BA”, “A”) all have the highest frequency, we’d merge (“BA”, “A”)
 
 
-Strip out the endoftext token from dataset, then use `re.finditer` to pretokenize based on gpt-2 regex pattern
- 
+Strip out the <|endoftext|> token from dataset, then use `re.finditer` to pretokenize based on gpt-2 regex pattern
+
+Pre-tokenization can be sped up by using multiprocessing library by python .. 
+
+-- But the BPE needs to be run sequentially that is it cant be sped up ( afaik )
+
+`re.finditer` : this basically takes outputs from the matched regex patterns and yield it out ( so its a generator that pauses itself)
+
+
+```bash
+# this is how the stream should be made up ! 
+
+def stream_chunks(path, size=4096):
+    with open(path, "r", encoding="utf-8") as f:
+        while True:
+            chunk = f.read(size)
+            if not chunk:
+                break
+            yield chunk
+
+```
+
