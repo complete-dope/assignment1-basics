@@ -1,15 +1,13 @@
 # this is used to tokenize the values
 
 from collections import defaultdict
-import string
-from this import d
 from typing import DefaultDict
 import regex as re 
 import time
 
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 text = 'some text that Ill pretokenize'
-
+CHUNK_SIZE = 1024*1024*500 # 500mb
 # out = re.finditer(PAT, text)
 # print(out.match())
 # print(dir(out))
@@ -96,30 +94,32 @@ for _ in range(6): # max 10 only
 # read the file from data 
 import os 
 VALIDATION_FILE = '../data/TinyStoriesV2-GPT4-valid.txt'
+TRAIN_FILE= '../data/TinyStoriesV2-GPT4-train.txt'
 validation_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)) ,VALIDATION_FILE) 
+train_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)) ,TRAIN_FILE) 
 
 # split this
-data = ''
-with open(validation_file_path , 'r', encoding = 'utf-8') as f:
-    # f here is the file-path 
-    data += f.read()
+# data = ''
+# with open(validation_file_path , 'r', encoding = 'utf-8') as f:
+#     # f here is the file-path 
+#     data += f.read()
 
-print('\n----\n')
-print(type(data))
-print('string data is : ', data[:5] + '\n\n')
+# print('\n----\n')
+# print(type(data))
+# print('string data is : ', data[:5] + '\n\n')
 
 #  we note that the merging part of BPE training is not parallelizable in Python.
 
-import re
-special_tokens = ["<|endoftext|>"]
+# special_tokens = ["<|endoftext|>"]
 
-# Build a regex-safe OR pattern for all special tokens
-pattern = "|".join(re.escape(t) for t in special_tokens) # take in consideration all the special tokens
+# # Build a regex-safe OR pattern for all special tokens
 
-# Split on the special tokens
-data_parts = re.split(pattern, data)
+# pattern = "|".join(re.escape(t) for t in special_tokens) # take in consideration all the special tokens
 
-print(data_parts[:2])
+# # Split on the special tokens
+# data_parts = re.split(pattern, data)
+
+# print(data_parts[:2])
 
 
 
@@ -128,60 +128,93 @@ class BPE_Trainer:
         self.input_path = input_path
         self.vocab_size = vocab_size
         self.special_tokens = special_tokens
+        self.starting_range = 256 + len(self.special_tokens)
 
-    def _pretokenization(self, FILE = False, text_data=''):
-        if FILE:
-            validation_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)) ,VALIDATION_FILE) 
-            data = ''
-            with open(validation_file_path , 'r', encoding = 'utf-8') as f:
-                # f here is the file-path 
-                data = f.read()
+
+    def _pretokenization(self, file_path, FILE = False, text_data='', streaming=False):
+         
+        self.starting_range = 256 + len(self.special_tokens)
+        byte_merges = self.vocab_size - self.starting_range # this tells total no. of merges to do 
+        wordBytes_freq_table :defaultdict[tuple[bytes], int]= defaultdict(int)
+
+        if streaming: 
+            from chunking import read_up_to_last_delimiter
+            generator_function = read_up_to_last_delimiter(file_path, delimiter =b'<|endoftext|>', chunk_size=CHUNK_SIZE)
+
+            for data in generator_function:
+                chunked_data = [data]
+                # now pretokenize this data ( based on gpt-2 regex pattern )
+                GPT2_REGEX = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+
+                pretokenized_data = []
+                for string_para in chunked_data:
+                    # print('string para is ', string_para)
+                    pretokenized_data += re.findall(GPT2_REGEX , string_para.decode('utf-8'))
+
+                for word in pretokenized_data:
+                    bytes_array = []
+                    for chr in word:
+                        bytes_array.append(chr.encode('utf-8'))
+
+                    wordBytes_freq_table[tuple(bytes_array)] += 1
+
+            print('The length of the word bytes table in streaming manner is : ', len(wordBytes_freq_table))
+            return byte_merges, wordBytes_freq_table
 
         else:
-            data = text_data
+            print('WARNING : This may lead to high memory consumption and lead to crashing !')
+            if FILE:
+                data = ''
+                with open(file_path , 'r', encoding = 'utf-8') as f:
+                    # f here is the file-path 
+                    data = f.read()
+            else:
+                data = text_data
+            
+            # split this
+            if self.special_tokens:
+                pattern = "|".join([re.escape(t) for t in self.special_tokens]) # split based on the special tokens
+                chunked_data = re.split(pattern, data) # Nx paragraphs 
+            else:
+                chunked_data = [data]
+                
+            # now pretokenize this data ( based on gpt-2 regex pattern )
+            GPT2_REGEX = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+
+            pretokenized_data = []
+            for string_para in chunked_data:
+                # print('string para is ', string_para)
+                pretokenized_data += re.findall(GPT2_REGEX , string_para)
+
+            for word in pretokenized_data:
+                bytes_array = []
+                for chr in word:
+                    bytes_array.append(chr.encode('utf-8'))
+
+                wordBytes_freq_table[tuple(bytes_array)] += 1
+
+            print('The length of the word bytes table in non-streaming case/manner is : ', len(wordBytes_freq_table))
+            return byte_merges, wordBytes_freq_table
+
+
+    # def _byteFreq_table(self):
+    #     pretokenized_data = self._pretokenization(FILE = True, streaming=True)
         
-        # split this
-        if self.special_tokens:
-            pattern = "|".join([re.escape(t) for t in self.special_tokens]) # split based on the special tokens
-            chunked_data = re.split(pattern, data) # Nx paragraphs 
-        else:
-            chunked_data = [data]
+    #     byte_merges = self.vocab_size - self.starting_range # this tells total no. of merges to do 
+        
+    #     wordBytes_freq_table = defaultdict[tuple[bytes], int](int)
+    #     for word in pretokenized_data:
+    #         bytes_array = []
+    #         for chr in word:
+    #             bytes_array.append(chr.encode('utf-8'))
 
-        print('chunk-data is ', chunked_data)
-            
-        # now pretokenize this data ( based on gpt-2 regex pattern )
-        GPT2_REGEX = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+    #         wordBytes_freq_table[tuple(bytes_array)] += 1
 
-        pretokenized_data = []
-        for string_para in chunked_data:
-            print('string para is ', string_para)
-            import regex as re
-            pretokenized_data += re.findall(GPT2_REGEX , string_para)
-        print('pd is ', pretokenized_data)
+    #     return byte_merges, wordBytes_freq_table
 
-        # pretokenized_data = []
-        # for string_para in chunked_data:
-        #     words = string_para.split(' ')
-        #     for word in words:
-        #         pretokenized_data.append(word)
-            
-        # pretokenized_data = [word.split(' ') for chunk_data in chunked_data for word in chunk_data ]
-
-        return pretokenized_data
 
     def train(self) -> (dict[int, bytes] , list[tuple[bytes]]):
-        pretokenized_data = self._pretokenization(FILE = True)
-        
-        starting_range = 256 + len(self.special_tokens)
-        byte_merges = self.vocab_size - starting_range # this tells total no. of merges to do 
-        
-        wordBytes_freq_table = defaultdict[tuple[bytes], int](int)
-        for word in pretokenized_data:
-            bytes_array = []
-            for chr in word:
-                bytes_array.append(chr.encode('utf-8'))
-
-            wordBytes_freq_table[tuple(bytes_array)] += 1
+        byte_merges,wordBytes_freq_table =  self._pretokenization(file_path = self.input_path, FILE = True, streaming=True)
 
         times = []
         vocab:dict[int, bytes] = {} 
@@ -218,8 +251,8 @@ class BPE_Trainer:
             merge_chars_count = merges_list[0][1]
 
             # add this to vocab_table
-            vocab[starting_range] = merge_chars[0] + merge_chars[1]
-            starting_range +=1
+            vocab[self.starting_range] = merge_chars[0] + merge_chars[1]
+            self.starting_range +=1
             merges.append(merge_chars)
 
             if merge_chars_count == 1: 
@@ -370,11 +403,33 @@ merges:list[bytes,bytes] = []
 for i in range(256):
     vocab[i] = bytes([i])
 
-output = BPE_Trainer(input_path = validation_file_path, vocab_size=256).encoder(text = 'I am here', vocab = vocab)
-print(output)
+# output = BPE_Trainer(input_path = validation_file_path, vocab_size=256).encoder(text = 'I am here', vocab = vocab)
+# print(output)
 
-# vocab, merges =  BPE_Trainer(input_path = validation_file_path, vocab_size = 256+1+300 , special_tokens=['<|endoftext|>']).train()
 
-# print(vocab)
-# print('\n\n\n')
-# print(merges)
+vocab, merges =  BPE_Trainer(input_path = train_file_path, vocab_size = 256+1+10000 , special_tokens=['<|endoftext|>']).train()
+
+print(vocab)
+print('\n\n\n')
+print(merges)
+
+# store these vocabs to a json-file also ! (add that in an iterable json format !) 
+import json
+
+def to_jsonable(obj):
+    if isinstance(obj, bytes):
+        return obj.decode("utf-8", errors="replace")
+    if isinstance(obj, dict):
+        return {to_jsonable(k): to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [to_jsonable(x) for x in obj]
+    return obj
+
+clean_vocab = to_jsonable(vocab)
+
+with open("vocab.json", "w") as f:
+    json.dump(clean_vocab, f, indent=4)
+
+
+# we cant load the entire dataset so we need to make chunks and load
+
