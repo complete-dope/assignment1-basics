@@ -8,6 +8,12 @@ import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
+import os 
+import sys 
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
+# all-imports 
+from cs336_basics.lm_model.layers import Linear
 
 
 def run_linear(
@@ -29,7 +35,13 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
 
-    raise NotImplementedError
+    linear_layer = Linear(d_in ,d_out)
+
+    state_dict = {'weights':weights}
+    linear_layer.load_state_dict(state_dict, strict=True)
+
+    return linear_layer(in_features)
+
 
 
 def run_embedding(
@@ -590,3 +602,12 @@ def run_train_bpe(
                 Merges are ordered by order of creation.
     """
     raise NotImplementedError
+
+
+
+# if __name__ == "__main__":
+
+#     out = run_linear(d_in = 10, d_out=20, weights=torch.zeros(size = (20,10)) , in_features = torch.randn(size = (4,10)))   
+
+#     print(out.shape)
+

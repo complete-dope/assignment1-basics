@@ -1,0 +1,40 @@
+Using einsum notations as those are easy to use and makes the code readable 
+
+`torch.einsum()` provides an really amazing way of using those !
+that is another ball game to learn , if you really want to deep dive into the einsum() operations 
+
+Input:
+batch, seq, d_in
+d_out, d_in
+
+Output: 
+batch, seq, d_out
+
+
+# Param Initialisation 
+
+Linear weights: mean =0 , deviation = 2/(d_in + d_out) , truncated at [-3d, 3d] 
+Embeddings: mean =0, deviation = 1
+RMSNorm: 1 
+
+
+
+# Memory ordering
+
+W = d_out x d_in
+x = 1 x d_in
+Most ML papers use row notations and do : x @ W.T (That is basically , [1 x d_in] [d_in x d_out])
+
+I am going ahead with the torch notation 
+
+
+
+* Writing my your own Linear layer
+Difference between `torch.empty()` and `torch.randn()`  
+
+`torch.empty()` : this takes in garbage value that is already in the memory (performant)
+`torch.randn()` : this takes out random values from the gaussian distribution 
+
+
+* Test that using this  :uv run --active pytest -k test_linear
+
