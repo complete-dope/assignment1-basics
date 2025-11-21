@@ -14,6 +14,10 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 # all-imports 
 from cs336_basics.lm_model.layers import Linear
+from cs336_basics.lm_model.layers import Embedding
+from cs336_basics.lm_model.layers import RMSNorm
+from cs336_basics.lm_model.layers import softmax
+from cs336_basics.lm_model.layers import scaled_dot_product_attention
 
 
 def run_linear(
@@ -62,8 +66,10 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-
-    raise NotImplementedError
+    embedding_layer = Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
+    embedding_layer.load_state_dict({'embedding_matrix':weights}, strict=True)
+     
+    return embedding_layer(token_ids)
 
 
 def run_swiglu(
@@ -116,7 +122,7 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    return scaled_dot_product_attention(Q,K,V,mask)
 
 
 def run_multihead_self_attention(
@@ -390,7 +396,11 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+
+    rmsnorm= RMSNorm(d_model, eps)
+    rmsnorm.load_state_dict({'gain':weights} , strict=True)
+    
+    return rmsnorm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -443,7 +453,8 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+     
+    return softmax(in_features, dim)
 
 
 def run_cross_entropy(

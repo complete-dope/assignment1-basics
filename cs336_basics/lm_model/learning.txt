@@ -17,7 +17,7 @@ Linear weights: mean =0 , deviation = 2/(d_in + d_out) , truncated at [-3d, 3d]
 Embeddings: mean =0, deviation = 1
 RMSNorm: 1 
 
-
+Create parameters in torch using `torch.nn.Parameter()` and requires_grad = True in those 
 
 # Memory ordering
 
@@ -37,4 +37,44 @@ Difference between `torch.empty()` and `torch.randn()`
 
 
 * Test that using this  :uv run --active pytest -k test_linear
+
+Post norm transformer means the normalization is added after the computation from the attention block
+Pre-norm transformer means the normalization is added on the input that goes for computation before the attention block 
+
+# TODO : really ? how does that work ? 
+
+An intuition for pre-norm is that there is a clean “residual stream” without any normalization going from the input embeddings to the final output of the Transformer, which is purported to improve gradient flow
+
+RMS layernorm does a rule sharing between all the input batches and this is required also as a LM models dimension end up learning / tracking values that are dim 0 is 'punctuation', dim 14 is 'sentiment', dim 129 is 'plurality' etc   
+
+
+Specifically, we will implement the
+“SwiGLU” activation function adopted in LLMs like Llama 3 [Grattafiori et al., 2024] and Qwen 2.5 [Yang
+et al., 2024], which combines the SiLU (often called Swish) activation with a gating mechanism called a
+Gated Linear Unit (GLU)
+
+So these newer activation function that are getting used / giving some nice results are all made up of a signature formula `x * PHI_FUNCTION()` , this PHI_FUNCTION is the one that can either be a sigmoid function (swiglu) or a cdf function (gelu)
+
+GLU (gated linear units) : (W2*x) * sigmoid(W1*x) where this represents an element wise multiplication, reduce the vanishing gradient problem for deep architectures by providing a linear path for the gradients while retaining non-linear
+capabilities 
+
+```bash
+x * sigmoid(x) then this becomes : 
+(1 * sigmoid(x) + d_sigmoid(x) * x)
+
+x = 0.012
+sigmoid = 0.503
+d_sigmoid = 0.249
+(1 * sigmoid(x) + d_sigmoid(x) * x) = 0.506 
+```
+
+Canonically / set standard = `d_ff = 8/3 * d_model`
+
+
+FFN(x) = SwiGLU(x, W1 , W2 , W3 ) = W2 (SiLU(W1 x) ⊙ W3 x) in LM nowadays !
+
+
+# TODO :SWIGlu left knowlingly will do later , pg : 23 of assignment-1
+
+# uv run --active pytest -k test_softmax_matches_pytorch
 
